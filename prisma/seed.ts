@@ -39,12 +39,13 @@ async function main() {
 
   await db.user.upsert({
     where: { email: "demo@adintel.app" },
-    update: {},
+    update: { role: "ADMIN" },
     create: {
       email: "demo@adintel.app",
       passwordHash,
       name: "Demo User",
       organizationId: organization.id,
+      role: "ADMIN",
       onboardingComplete: true,
       businessType: "DROPSHIPPING",
       mainMarket: "EUROPE",

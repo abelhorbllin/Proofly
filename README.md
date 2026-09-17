@@ -1,36 +1,95 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# ADINTEL
 
-## Getting Started
+**Don't just find products. Validate them.**
 
-First, run the development server:
+ADINTEL is an e-commerce competitive intelligence SaaS: analyze competitor stores, their ads, traffic and pricing,
+then combine that evidence into a Product Validator report — market signals, competitor activity, ad signals,
+business estimates, unit economics and an AI assessment — before spending money testing an idea.
+
+Every estimated metric ships with a range, a confidence level, a source and a methodology. Nothing is presented as
+verified fact unless it is. When public data is insufficient, the product says so explicitly instead of inventing a
+number.
+
+## Stack
+
+- **Framework:** Next.js 16 (App Router) + TypeScript + React 19
+- **UI:** Tailwind CSS v4, a hand-rolled shadcn/ui-style component kit, Recharts, Lucide icons
+- **Database:** PostgreSQL + Prisma ORM
+- **Auth:** Auth.js (NextAuth v5) — credentials provider + Prisma adapter (Google OAuth wired, disabled until
+  `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` are set)
+- **AI:** OpenAI (structured JSON output, Zod-validated) with a deterministic templated fallback when no
+  `OPENAI_API_KEY` is set, so the product is fully usable without one
+- **Billing:** Stripe subscriptions (Checkout, Billing Portal, webhooks) with a mock-billing fallback when no Stripe
+  keys are configured
+- **PDF reports:** rendered with headless Chromium (Playwright)
+- **Data providers:** `AdDataProvider` / `TrafficDataProvider` / `StoreDataProvider` / `ProductDataProvider`
+  interfaces under `src/lib/providers`, backed by deterministic seeded mock implementations. Swapping in a real,
+  licensed provider only means adding a class and wiring it into `src/lib/providers/index.ts` — no call site changes.
+
+## Getting started
 
 ```bash
+npm install
+cp .env.example .env   # fill in DATABASE_URL at minimum
+npx prisma migrate dev
+npm run db:seed
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open http://localhost:3000. Sign in with the seeded demo account:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- **Email:** `demo@adintel.app`
+- **Password:** `demo1234`
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+The demo account is seeded as an admin (`/admin`) with 5 analyzed stores, tracked competitors, alerts, an AI
+strategy insight and a sample report already generated, so the dashboard is populated on first login.
 
-## Learn More
+## Environment variables
 
-To learn more about Next.js, take a look at the following resources:
+See `.env.example`. Everything except `DATABASE_URL` and `NEXTAUTH_SECRET` is optional in development:
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+| Variable | Required | Effect when unset |
+| --- | --- | --- |
+| `DATABASE_URL` | Yes | — |
+| `NEXTAUTH_SECRET` | Yes | — |
+| `OPENAI_API_KEY` | No | AI features fall back to deterministic templated output, clearly labeled `mock-ai` |
+| `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` / `STRIPE_PRICE_PRO` / `STRIPE_PRICE_AGENCY` | No | Billing runs in mock mode — "upgrading" applies the plan directly in the database |
+| `AD_PROVIDER_API_KEY` / `TRAFFIC_PROVIDER_API_KEY` / `STORE_PROVIDER_API_KEY` | No | Falls back to the seeded mock data providers |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | No | Google sign-in is hidden until both are set |
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Scripts
 
-## Deploy on Vercel
+```bash
+npm run dev          # start the dev server
+npm run build         # production build
+npm run lint          # ESLint
+npm run db:migrate    # prisma migrate dev
+npm run db:seed       # seed demo data (safe to re-run)
+npm run db:studio     # Prisma Studio
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Architecture notes
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- `src/lib/providers` — provider interfaces + mock implementations. All external metrics return
+  `{ value, low, high, confidence, source, observedAt, methodology }`, never a bare number.
+- `src/lib/analysis/generate-store-analysis.ts` — the store analysis job: calls every provider, persists
+  stores/products/ads/creatives/traffic/revenue and timeline events. Used by both the live "Analyze Store" flow and
+  the demo seed script, so they never drift apart.
+- `src/lib/ai/ai-service.ts` — every AI call goes through here. Prompts explicitly forbid inventing facts and require
+  separating observed data from estimates; outputs are Zod-validated.
+- `src/lib/billing` — `plans.ts` (pricing/limits config), `usage.ts` (`UsageCounter`-style monthly usage tracking and
+  limit enforcement), `stripe.ts` + `subscription-service.ts` (real Stripe or mock fallback behind one interface).
+- `src/lib/calculations/unit-economics.ts` — the unit economics and revenue simulation formulas, shared by the
+  Product Validator, the Unit Economics calculator and the Revenue Simulator so the math is defined once.
+
+## What's mocked vs. real in this environment
+
+This environment has no external API credentials configured, so:
+
+- **Store/product/ad/traffic data** is generated by deterministic seeded mock providers (same domain → same data
+  every time), per spec — the provider interfaces are real and ready for a licensed data source to be dropped in.
+- **AI analysis** uses a templated deterministic fallback unless `OPENAI_API_KEY` is set, in which case it calls
+  OpenAI directly with Zod-validated structured output.
+- **Billing** runs in mock mode (plan changes apply directly) unless Stripe keys are set — the full Checkout/Portal/
+  webhook integration is implemented and will activate automatically once configured.
+- **PDF reports** are real, generated via headless Chromium — not mocked.

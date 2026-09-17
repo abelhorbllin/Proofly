@@ -78,6 +78,9 @@ function AnalyzeStoreForm() {
 
   useEffect(() => {
     const initial = searchParams.get("url");
+    // Kicks off a one-time network request when arriving with a prefilled
+    // URL (e.g. from the dashboard search bar) — not a render-time state sync.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (initial) runAnalysis(initial);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

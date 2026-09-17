@@ -37,9 +37,11 @@ export function CommandMenu() {
 
   React.useEffect(() => {
     if (query.trim().length < 2) {
-      setResults([]);
       return;
     }
+    // Debounced search-as-you-type: loading state reflects the in-flight
+    // fetch below, not a render-time state sync.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true);
     const timeout = setTimeout(async () => {
       try {
@@ -91,7 +93,7 @@ export function CommandMenu() {
               {query.trim().length >= 2 && !loading && results.length === 0 && (
                 <p className="px-3 py-6 text-center text-sm text-muted-foreground">No matches found.</p>
               )}
-              {results.map((r) => {
+              {query.trim().length >= 2 && results.map((r) => {
                 const ItemIcon = ICONS[r.type];
                 return (
                   <Command.Item
